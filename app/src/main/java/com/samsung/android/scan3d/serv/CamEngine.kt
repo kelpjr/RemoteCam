@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.ImageFormat
+import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
 import android.media.ImageReader
@@ -32,7 +34,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
-
+import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.SessionConfiguration
 class CamEngine(val context: Context) {
 
     var http: HttpService? = null
@@ -82,7 +85,11 @@ class CamEngine(val context: Context) {
     }
 
     var viewState: ViewState = ViewState(
-        true, stream = false, cameraId = "0", quality = 80, resolutionIndex = null
+        true,
+        stream = false,
+        cameraId = cameraList.first().cameraId,
+        quality = 80,
+        resolutionIndex = null
     )
 
     /** [CameraCharacteristics] corresponding to the provided Camera ID */
@@ -121,9 +128,13 @@ class CamEngine(val context: Context) {
 
     @SuppressLint("MissingPermission")
     private suspend fun openCamera(
-        manager: CameraManager, cameraId: String, handler: Handler? = null
+        manager: CameraManager,
+        cameraId: String,
+        logicalCameraId: String?,
+        handler: Handler? = null
     ): CameraDevice = suspendCancellableCoroutine { cont ->
-        manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+        val idToOpen = logicalCameraId ?: cameraId;
+        manager.openCamera(idToOpen, object : CameraDevice.StateCallback() {
             override fun onOpened(device: CameraDevice) = cont.resume(device)
 
             override fun onDisconnected(device: CameraDevice) {
@@ -151,23 +162,40 @@ class CamEngine(val context: Context) {
      * suspend coroutine
      */
     private suspend fun createCaptureSession(
-        device: CameraDevice, targets: List<Surface>, handler: Handler? = null
+        device: CameraDevice,
+        physicalCamId: String?,
+        targets: List<Surface>,
+        handler: Handler? = null
     ): CameraCaptureSession = suspendCoroutine { cont ->
-
+        val outputConfigs = mutableListOf<OutputConfiguration>();
+        targets.forEach {
+            outputConfigs.add(OutputConfiguration(it).apply {
+                // If physical camera id is not null, it's a logical cam, you should set it
+                if (physicalCamId != null) {
+                    setPhysicalCameraId(physicalCamId)
+                }
+            })
+        }
         // Create a capture session using the predefined targets; this also involves defining the
         // session state callback to be notified of when the session is ready
-        device.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
+        val sessionConfiguration = SessionConfiguration(
+            SessionConfiguration.SESSION_REGULAR,
+            outputConfigs,
+            Executors.newSingleThreadExecutor(),
+            object : CameraCaptureSession.StateCallback() {
 
-            override fun onConfigured(session: CameraCaptureSession) = cont.resume(session)
+                override fun onConfigured(session: CameraCaptureSession) = cont.resume(session)
 
-            override fun onConfigureFailed(session: CameraCaptureSession) {
-                val exc = RuntimeException("Camera ${device.id} session configuration failed")
-                Log.e("CamEngine", exc.message, exc)
-                cont.resumeWithException(exc)
+                override fun onConfigureFailed(session: CameraCaptureSession) {
+                    val exc = RuntimeException("Camera ${device.id} session configuration failed")
+                    Log.e("CamEngine", exc.message, exc)
+                    cont.resumeWithException(exc)
+                }
             }
-        }, handler)
-    }
+        )
 
+        device.createCaptureSession(sessionConfiguration)
+    }
     suspend fun initializeCamera() {
         Log.i("CAMERA", "initializeCamera")
 
@@ -195,9 +223,8 @@ class CamEngine(val context: Context) {
         resW = sizes[viewState.resolutionIndex!!].width
         resH = sizes[viewState.resolutionIndex!!].height
 
-
-
-        camera = openCamera(cameraManager, viewState.cameraId, cameraHandler)
+        val sensor = cameraList.find { it.cameraId == viewState.cameraId }!!
+        camera = openCamera(cameraManager, sensor.cameraId, sensor.logicalCameraId, cameraHandler)
         imageReader = ImageReader.newInstance(
             resW, resH, camOutPutFormat, 4
         )
@@ -206,7 +233,12 @@ class CamEngine(val context: Context) {
 
             targets = targets.plus(previewSurface!!)
         }
-        session = createCaptureSession(camera, targets, cameraHandler)
+        session = createCaptureSession(
+            camera,
+            if (sensor.logicalCameraId == null) null else sensor.cameraId,
+            targets,
+            cameraHandler
+        )
         val captureRequest = camera.createCaptureRequest(
             CameraDevice.TEMPLATE_RECORD //TEMPLATE_PREVIEW
         )
@@ -275,16 +307,42 @@ class CamEngine(val context: Context) {
     }
 
     fun updateView() {
+        val selectedCamera = cameraList.find { it.cameraId == viewState.cameraId }
         val intent = Intent("UpdateFromCameraEngine") //FILTER is a string to identify this intent
-        intent.putExtra(
-            "data", Data(
-                cameraList,
-                cameraList.find { it.cameraId == viewState.cameraId }!!,
-                resolutions = sizes,
-                resolutionSelected = viewState.resolutionIndex!!
+        if (selectedCamera != null) {
+            intent.putExtra(
+                "data", Data(
+                    cameraList,
+                    selectedCamera,
+                    resolutions = sizes,
+                    resolutionSelected = viewState.resolutionIndex!!
+                )
             )
-        )
-        context.sendBroadcast(intent)
+            context.sendBroadcast(intent)
+        } else {
+            try {
+                val cameraIdList = cameraManager.cameraIdList // may be empty
+
+                // iterate over available camera devices
+                for (cameraId in cameraIdList) {
+                    Log.e("ERROR CAMCAM", cameraId)
+                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                    val cameraLensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                    val cameraCapabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+
+                    // check if the selected camera device supports basic features
+                    // ensures backward compatibility with the original Camera API
+                    val isBackwardCompatible = cameraCapabilities?.contains(
+                        CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE) ?: false
+
+                }
+            } catch (e: CameraAccessException) {
+                e.message?.let { Log.e("ERROR CAMCAM", it) }
+
+            }
+
+            // Handle the case when no matching camera is found
+        }
     }
 
     fun updateViewQuick(dq: DataQuick) {

@@ -13,8 +13,12 @@ import kotlin.math.roundToInt
 
 object Selector { /** Helper class used as a data holder for each selectable camera format item */
 @Parcelize
-data class SensorDesc(val title: String, val cameraId: String, val format: Int) : Parcelable
-
+data class SensorDesc(
+    val title: String,
+    val cameraId: String,
+    val logicalCameraId: String?,
+    val format: Int
+) : Parcelable
     /** Helper function used to convert a lens orientation enum into a human-readable string */
     private fun lensOrientationString(value: Int) = when (value) {
         CameraCharacteristics.LENS_FACING_BACK -> "Back"
@@ -64,45 +68,48 @@ data class SensorDesc(val title: String, val cameraId: String, val format: Int) 
         // Get list of all compatible cameras
         val cameraIds = mutableListOf<String>()
 
-        for (i in 0..100) {
+        cameraManager.cameraIdList.forEach { it ->
+            cameraIds.add(it.toString())
+        }
 
-            val istr = i.toString()
-            if (!cameraIds.contains(istr)) {
-                cameraIds.add(istr)
+        val cameraIds2 = mutableListOf<SensorDesc>()
+        val openableCameraIds = mutableListOf<String>()
+        cameraIds.forEach { id ->
+            try {
+                val characteristics = cameraManager.getCameraCharacteristics(id)
+                val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+
+                if (capabilities?.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA) == true) {
+                    // We got an evil logical camera here, split it up into physical ones
+                    characteristics.physicalCameraIds.forEach { physId ->
+                        cameraIds2.add(SensorDesc("", physId, id, 0))
+                    }
+                } else {
+                    cameraIds2.add(SensorDesc("", id, null, 0))
+                    openableCameraIds.add(id)
+                }
+            } catch (_: Exception) {
+                // Handle the exception if needed
             }
         }
 
-        val cameraIds2 = mutableListOf<String>()
-        cameraIds.filter {
-
-            try {
-                val characteristics = cameraManager.getCameraCharacteristics(it)
-                val capabilities = characteristics.get(
-                    CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES
-                )
-
-                if (capabilities == null) {
-                    false
-                } else if (capabilities.contains(
-                        CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA
-                    )
-                ) {
-                    false
-                } else {
-                    capabilities.contains(
-                        CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE
-                    )
-                }
-            } catch (e: Exception) {
-                false
+        // There can be physical cameras that you can access both from a logical camera and as a
+        // physical camera. (For example, on Galaxy S23 Ultra, the ultra-wide camera)
+        // We remove the duplicates here.
+        // We enumerate all directly openable camera IDs, then search in cameraIds2 for a logical
+        // camera entry that contains it, then delete it
+        val removeList = mutableListOf<SensorDesc>()
+        openableCameraIds.forEach { id ->
+            cameraIds2.removeAll {
+                it.logicalCameraId != null && it.cameraId == id
             }
-        }.forEach { cameraIds2.add(it) }
+        }
 
         // Iterate over the list of cameras and return all the compatible ones
-        cameraIds2.forEach { id ->
+        cameraIds2.forEach { desc ->
 
-            Log.i("SELECTOR", "id: $id")
-            val characteristics = cameraManager.getCameraCharacteristics(id)
+            Log.i("SELECTOR", "Camera ${desc.cameraId} @ LogicalCam ${desc.logicalCameraId}")
+            val characteristics = cameraManager.getCameraCharacteristics(desc.cameraId)
             val orientation = lensOrientationString(
                 characteristics.get(CameraCharacteristics.LENS_FACING)!!
             )
@@ -139,11 +146,16 @@ data class SensorDesc(val title: String, val cameraId: String, val format: Int) 
 
             // All cameras *must* support JPEG output so we don't need to check characteristics
 
-            val title = "vfov:$vfov $foc $ape $orientation"
+            val camId = if (desc.logicalCameraId == null)
+                "${desc.cameraId}"
+            else
+                "${desc.cameraId}@${desc.logicalCameraId}"
+
+            val title = "$camId vfov:$vfov $foc $ape $orientation"
             if (!availableCameras.any { it -> it.title == title }) {
                 availableCameras.add(
                     SensorDesc(
-                        title, id, ImageFormat.JPEG
+                        title, desc.cameraId, desc.logicalCameraId, ImageFormat.JPEG
                     )
                 )
             }
