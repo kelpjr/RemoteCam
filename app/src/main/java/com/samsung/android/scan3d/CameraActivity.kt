@@ -17,11 +17,18 @@
 package com.samsung.android.scan3d
 
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.util.Log
+import android.widget.Switch
 import androidx.appcompat.app.AppCompatActivity
 import com.samsung.android.scan3d.databinding.ActivityCameraBinding
 import com.samsung.android.scan3d.locationServices.LocationService
@@ -33,11 +40,15 @@ import com.samsung.android.scan3d.serv.CameraActionState.START
 import com.samsung.android.scan3d.serv.CameraActionState.STOP
 
 const val KILL_THE_APP = "KILL"
+const val MY_PERMISSIONS_MANAGE_WRITE_SETTINGS = 100
 
 class CameraActivity : AppCompatActivity() {
 
     private var _binding: ActivityCameraBinding? = null
     private val binding get() = _binding!!
+
+    private var mSettingPermission = true
+
 
     private val receiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -46,18 +57,36 @@ class CameraActivity : AppCompatActivity() {
         }
     }
 
+    private fun settingPermission() {
+        mSettingPermission = true
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.System.canWrite(applicationContext)) {
+                mSettingPermission = false
+                val intent =
+                    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
+                startActivityForResult(intent, MY_PERMISSIONS_MANAGE_WRITE_SETTINGS)
+            }
+        }
+    }
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setCameraForegroundServiceState(START)
+
+        settingPermission()
+
         _binding = ActivityCameraBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setCameraForegroundServiceState(START)
         registerReceiver(receiver, IntentFilter(KILL_THE_APP))
+
     }
 
     override fun onPause() {
         super.onPause()
-//        setCameraForegroundServiceState(ON_PAUSE)
+        setCameraForegroundServiceState(ON_PAUSE)
     }
 
     override fun onDestroy() {
@@ -73,7 +102,7 @@ class CameraActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-//        setCameraForegroundServiceState(ON_RESUME)
+        setCameraForegroundServiceState(ON_RESUME)
     }
 
     fun setCameraForegroundServiceState(action: CameraActionState, extra: ((Intent) -> Unit)? = null) {

@@ -27,6 +27,7 @@ import java.io.OutputStream
 
 class WebServer(private val port:Int= 9000) {
     private var latestLocation: Location? = null
+    private var connectedDevices: List<String> ?= null
 
     fun getPort(): Int {
         return port
@@ -36,6 +37,10 @@ class WebServer(private val port:Int= 9000) {
     fun updateLatestLocation(location: Location) {
         latestLocation = location
     }
+    fun getDevices(connectedDevices: List<String> ?) {
+        this.connectedDevices = connectedDevices
+    }
+
 
     private fun Route.shutdownRoute(){
         get("/shutdown") {
@@ -80,6 +85,15 @@ class WebServer(private val port:Int= 9000) {
                     call.respond(HttpStatusCode.NotFound, "Location data not available")
                 }
             }
+            get("/devices"){
+//                Log.d("LOCATION", "currentLocation: $connectedDevices")
+//                connectedDevices
+//                call.respond(
+//                    mapOf("devices" to connectedDevices)
+//                )
+                call.respond(mapOf("message" to "Hello world"))
+
+            }
             get("/") {
                 call.respond(mapOf("message" to "Hello world"))
             }
@@ -107,5 +121,6 @@ class WebServer(private val port:Int= 9000) {
     fun stop() {
         server.stop(10, 15, TimeUnit.MILLISECONDS)
     }
+
 
 }

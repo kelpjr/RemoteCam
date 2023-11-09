@@ -29,12 +29,11 @@
             android:background="#000000"
             android:backgroundTint="#000000">
 
-            <com.example.android.camera.utils.AutoFitSurfaceView
-                android:id="@+id/view_finder"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_gravity="center"
-                android:layout_weight="1" />
+                android:scrollbars="none" />
         </FrameLayout>
 
         <ScrollView
@@ -116,9 +115,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
                         android:layout_gravity="left"
-                        android:checked="true"
                         android:splitTrack="false"
-                        android:text="Preview"
+                        android:text="Hotspot"
                         android:textAppearance="@style/TextAppearance.AppCompat.Medium"
                         android:textColor="#C1C1C1" />
 

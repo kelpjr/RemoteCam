@@ -17,7 +17,6 @@
 package com.samsung.android.scan3d.fragments
 
 import android.Manifest
-import android.Manifest.permission.*
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -27,13 +26,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.util.Size
 import android.view.LayoutInflater
-import android.view.SurfaceHolder
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
@@ -41,20 +36,14 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.navigation.NavController
-import androidx.navigation.Navigation
 import com.example.android.camera.utils.OrientationLiveData
+import com.samsung.android.scan3d.hotspotServices.createHotspotEnabler
 import com.samsung.android.scan3d.CameraActivity
-import com.samsung.android.scan3d.KILL_THE_APP
-import com.samsung.android.scan3d.R
 import com.samsung.android.scan3d.databinding.FragmentCameraBinding
 import com.samsung.android.scan3d.locationServices.LocationService
 import com.samsung.android.scan3d.serv.CamEngine
 import com.samsung.android.scan3d.serv.CameraActionState
 import com.samsung.android.scan3d.serv.CameraActionState.NEW_VIEW_STATE
-import com.samsung.android.scan3d.util.ClipboardUtil
-import com.samsung.android.scan3d.util.IpUtil
-import com.samsung.android.scan3d.util.Selector
 import com.samsung.android.scan3d.util.isAllPermissionsGranted
 import com.samsung.android.scan3d.util.requestPermissionList
 import com.samsung.android.scan3d.webserver.WebServer
@@ -66,9 +55,7 @@ class CameraFragment : Fragment() {
     private val binding get() = _binding!!
     private val viewModel: CameraViewModel by viewModels()
 
-//    /**
-    /** AndroidX navigation arguments */
-    //  private val args: CameraFragmentArgs by navArgs()
+
 
     private var resolutionWidth = DEFAULT_WIDTH
     private var resolutionHeight = DEFAULT_HEIGHT
@@ -81,6 +68,9 @@ class CameraFragment : Fragment() {
     private var isServiceRunning: Boolean = false
     private var isUpdatingSwitch: Boolean = false
     private lateinit var serviceIntent: Intent
+
+    private var hotspotEnabled = false
+
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -116,10 +106,31 @@ class CameraFragment : Fragment() {
         }
 
         private fun setSwitchListeners() {
-//            binding.switch1.setOnCheckedChangeListener { _, prev ->
-//                viewModel.uiState.value.preview = prev
-//                sendViewState()
-//            }
+            hotspotEnabled = !hotspotEnabled
+            binding.switch1.setOnCheckedChangeListener { _, isChecked ->
+                binding.switch1.isEnabled = false
+                isUpdatingSwitch = true
+                //todo convert all this into a proper service
+                isServiceRunning = if (isChecked) {
+                    createHotspotEnabler(requireContext()).let {
+                        Log.d(TAG, "setSwitchListeners() returned: hotspot enabled")
+                        it.enableTethering()
+                    }
+                    true
+                } else {
+                    createHotspotEnabler(requireContext()).let {
+                        it.disableTethering()
+                    }
+                    false
+                }
+
+                val handler = Handler(Looper.getMainLooper())
+                handler.post(Runnable {
+                    binding.switch1.isChecked = isServiceRunning
+                    binding.switch1.isEnabled = true
+                    isUpdatingSwitch = false
+                })
+            }
             serviceIntent = Intent(requireContext(), LocationService::class.java)
             binding.switch2.setOnCheckedChangeListener { _, prev ->
                 binding.switch2.isEnabled = false
@@ -261,6 +272,8 @@ class CameraFragment : Fragment() {
 
 
     }
+
+
 
     companion object {
 

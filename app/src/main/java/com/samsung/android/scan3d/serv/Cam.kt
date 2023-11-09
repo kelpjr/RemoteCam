@@ -122,7 +122,7 @@ class Cam : Service() {
             //      builder?.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
         val notification: Notification = builder.build()
-        startForeground(123, notification) // Start the foreground service
+        startForeground(1, notification) // Start the foreground service
     }
 
     private fun startHttpService() {

@@ -115,7 +115,7 @@ class CamEngine(val context: Context) {
 
     private fun stopRunning() {
         if (session != null) {
-            Log.i("CAMERA", "close")
+            Log.i("CAMERA", "CAMERA closeee")
             session!!.stopRepeating()
             session!!.close()
             session = null
