@@ -24,6 +24,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.samsung.android.scan3d.databinding.ActivityCameraBinding
+import com.samsung.android.scan3d.locationServices.LocationService
 import com.samsung.android.scan3d.serv.Cam
 import com.samsung.android.scan3d.serv.CameraActionState
 import com.samsung.android.scan3d.serv.CameraActionState.ON_PAUSE
@@ -56,7 +57,7 @@ class CameraActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        setCameraForegroundServiceState(ON_PAUSE)
+//        setCameraForegroundServiceState(ON_PAUSE)
     }
 
     override fun onDestroy() {
@@ -64,11 +65,15 @@ class CameraActivity : AppCompatActivity() {
         super.onDestroy()
         setCameraForegroundServiceState(STOP)
         unregisterReceiver(receiver)
+        Intent(applicationContext, LocationService::class.java).apply {
+            action = LocationService.ACTION_STOP
+            startService(this)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        setCameraForegroundServiceState(ON_RESUME)
+//        setCameraForegroundServiceState(ON_RESUME)
     }
 
     fun setCameraForegroundServiceState(action: CameraActionState, extra: ((Intent) -> Unit)? = null) {
@@ -81,4 +86,6 @@ class CameraActivity : AppCompatActivity() {
             Log.e("CameraFragment.TAG", "Error closing camera", exc)
         }
     }
+
+
 }

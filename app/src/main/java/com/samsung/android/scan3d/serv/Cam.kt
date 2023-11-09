@@ -24,12 +24,14 @@ import com.samsung.android.scan3d.serv.CameraActionState.ON_PAUSE
 import com.samsung.android.scan3d.serv.CameraActionState.ON_RESUME
 import com.samsung.android.scan3d.serv.CameraActionState.START
 import com.samsung.android.scan3d.serv.CameraActionState.START_ENGINE
+import com.samsung.android.scan3d.webserver.WebServer
 import kotlinx.coroutines.runBlocking
 
 class Cam : Service() {
 
     var engine: CamEngine? = null
     var http: HttpService? = null
+    var webServer: WebServer? = null
     val CHANNEL_ID = "REMOTE_CAM"
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -40,7 +42,8 @@ class Cam : Service() {
         when (intent.action) {
             START.name -> {
                 startNotificationService()
-                startHttpService()
+//                startHttpService()
+                startWebServerService()
             }
 
             ON_PAUSE.name -> {
@@ -56,7 +59,11 @@ class Cam : Service() {
 
             START_ENGINE.name -> {
                 engine = CamEngine(this)
-                engine?.http = http
+                if (http == null) {
+                    engine?.webServer = webServer
+                }else{
+                    engine?.http = http
+                }
                 runBlocking { engine?.initializeCamera() }
             }
 
@@ -123,6 +130,10 @@ class Cam : Service() {
         http?.main()
     }
 
+    private fun startWebServerService(){
+        webServer = WebServer(8080)
+        webServer?.start()
+    }
     private fun kill() {
         engine?.destroy()
         http?.engine?.stop(500, 500)

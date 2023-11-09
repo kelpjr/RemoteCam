@@ -36,9 +36,12 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
+import com.samsung.android.scan3d.webserver.WebServer
+
 class CamEngine(val context: Context) {
 
     var http: HttpService? = null
+    var webServer: WebServer? = null
     var resW = 1280
     var resH = 720
 
@@ -290,9 +293,16 @@ class CamEngine(val context: Context) {
                         img.close()
                         aquired.decrementAndGet()
                         if (viewState.stream == true) {
-                            http?.channel?.trySend(
-                                bytes
-                            )
+                            if (http == null) {
+                                webServer?.channel?.trySend(
+                                    bytes
+                                )
+                            }else{
+                                http?.channel?.trySend(
+                                    bytes
+                                )
+                            }
+
                         }
                     }
                 }

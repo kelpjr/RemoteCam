@@ -16,6 +16,7 @@
 
 package com.samsung.android.scan3d.fragments
 
+import android.Manifest
 import android.Manifest.permission.*
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
@@ -23,6 +24,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.util.Size
 import android.view.LayoutInflater
@@ -45,6 +48,7 @@ import com.samsung.android.scan3d.CameraActivity
 import com.samsung.android.scan3d.KILL_THE_APP
 import com.samsung.android.scan3d.R
 import com.samsung.android.scan3d.databinding.FragmentCameraBinding
+import com.samsung.android.scan3d.locationServices.LocationService
 import com.samsung.android.scan3d.serv.CamEngine
 import com.samsung.android.scan3d.serv.CameraActionState
 import com.samsung.android.scan3d.serv.CameraActionState.NEW_VIEW_STATE
@@ -53,6 +57,7 @@ import com.samsung.android.scan3d.util.IpUtil
 import com.samsung.android.scan3d.util.Selector
 import com.samsung.android.scan3d.util.isAllPermissionsGranted
 import com.samsung.android.scan3d.util.requestPermissionList
+import com.samsung.android.scan3d.webserver.WebServer
 import kotlinx.coroutines.launch
 
 class CameraFragment : Fragment() {
@@ -61,11 +66,7 @@ class CameraFragment : Fragment() {
     private val binding get() = _binding!!
     private val viewModel: CameraViewModel by viewModels()
 
-    /** Host's navigation controller */
-    private val navController: NavController by lazy {
-        Navigation.findNavController(requireActivity(), R.id.fragment_container)
-    }
-
+//    /**
     /** AndroidX navigation arguments */
     //  private val args: CameraFragmentArgs by navArgs()
 
@@ -73,9 +74,13 @@ class CameraFragment : Fragment() {
     private var resolutionHeight = DEFAULT_HEIGHT
 
     private lateinit var cameraActivity: CameraActivity
-
     /** Live data listener for changes in the device orientation relative to the camera */
     private lateinit var relativeOrientation: OrientationLiveData
+
+
+    private var isServiceRunning: Boolean = false
+    private var isUpdatingSwitch: Boolean = false
+    private lateinit var serviceIntent: Intent
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -100,7 +105,7 @@ class CameraFragment : Fragment() {
             val resolution = data.resolutions[data.resolutionSelected]
             resolutionWidth = resolution.width
             resolutionHeight = resolution.height
-            binding.viewFinder.setAspectRatio(resolutionWidth, resolutionHeight)
+//            binding.viewFinder.setAspectRatio(resolutionWidth, resolutionHeight)
             setSwitchListeners()
 //            setSpinnerCam(data)
 //            setSpinnerQua()
@@ -111,89 +116,43 @@ class CameraFragment : Fragment() {
         }
 
         private fun setSwitchListeners() {
-            binding.switch1.setOnCheckedChangeListener { _, prev ->
-                viewModel.uiState.value.preview = prev
-                sendViewState()
-            }
+//            binding.switch1.setOnCheckedChangeListener { _, prev ->
+//                viewModel.uiState.value.preview = prev
+//                sendViewState()
+//            }
+            serviceIntent = Intent(requireContext(), LocationService::class.java)
             binding.switch2.setOnCheckedChangeListener { _, prev ->
+                binding.switch2.isEnabled = false
+                isUpdatingSwitch = true
                 viewModel.uiState.value.stream = prev
                 sendViewState()
-            }
-        }
-
-        private fun setSpinnerRes(data: CamEngine.Companion.Data) {
-            val outputFormats = data.resolutions
-            val spinnerDataList = outputFormats.map(Size::toString)
-            val spinnerAdapter = ArrayAdapter(
-                requireContext(), android.R.layout.simple_spinner_item, spinnerDataList
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-
-            with(binding.spinnerRes) {
-                adapter = spinnerAdapter
-                viewModel.uiState.value.resolutionIndex?.let {
-                    setSelection(viewModel.uiState.value.resolutionIndex!!)
-                    onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                        override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
-                            resolutionWidth = outputFormats[p2].width
-                            resolutionHeight = outputFormats[p2].height
-                            binding.viewFinder.setAspectRatio(resolutionWidth, resolutionHeight)
-                            if (p2 != viewModel.uiState.value.resolutionIndex) {
-                                viewModel.uiState.value.resolutionIndex = p2
-                                sendViewState()
-                            }
-                        }
-
-                        override fun onNothingSelected(p0: AdapterView<*>?) {}
+                isServiceRunning = if (prev) {
+                    Intent(requireContext().applicationContext, LocationService::class.java).apply {
+                        LocationService.webServer = WebServer()
+                        action = LocationService.ACTION_START
+                        requireContext().startService(this)
                     }
-                } ?: run {
-                    Log.i("DEUIBGGGGGG", "NO PRIOR R, " + data.resolutionSelected)
-                    viewModel.uiState.value.resolutionIndex = data.resolutionSelected
-                }
-            }
-        }
-
-        private fun setSpinnerQua() {
-            val spinnerDataList = arrayOf("1", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100")
-            val spinnerAdapter = ArrayAdapter(
-                requireContext(), android.R.layout.simple_spinner_item, spinnerDataList
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-
-            with(binding.spinnerQua) {
-                adapter = spinnerAdapter
-                setSelection(spinnerDataList.indexOfFirst { it.toInt() == viewModel.uiState.value.quality })
-                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
-                        viewModel.uiState.value.quality = spinnerDataList[p2].toInt()
-                        sendViewState()
+                    true
+                } else {
+                    Intent(requireContext().applicationContext, LocationService::class.java).apply {
+                        action = LocationService.ACTION_STOP
+                        requireContext().startService(this)
                     }
-
-                    override fun onNothingSelected(p0: AdapterView<*>?) {}
+                    false
                 }
+
+                val handler = Handler(Looper.getMainLooper())
+                handler.post(Runnable {
+                    binding.switch2.isChecked = isServiceRunning
+                    binding.switch2.isEnabled = true
+                    isUpdatingSwitch = false
+                })
             }
         }
 
-        private fun setSpinnerCam(data: CamEngine.Companion.Data) {
-            val spinnerDataList = data.sensors.map(Selector.SensorDesc::title)
-            val spinnerAdapter = ArrayAdapter(
-                requireContext(), android.R.layout.simple_spinner_item, spinnerDataList
-            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
-            with(binding.spinnerCam) {
-                adapter = spinnerAdapter
-                setSelection(data.sensors.indexOf(data.sensorSelected))
-                onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) {
-                        if (viewModel.uiState.value.cameraId != data.sensors[p2].cameraId) {
-                            viewModel.uiState.value.resolutionIndex = null
-                        }
-                        viewModel.uiState.value.cameraId = data.sensors[p2].cameraId
-                        sendViewState()
-                    }
 
-                    override fun onNothingSelected(p0: AdapterView<*>?) {}
-                }
-            }
-        }
+
     }
 
     fun sendViewState() {
@@ -250,17 +209,6 @@ class CameraFragment : Fragment() {
 //        })
 //    }
 
-    private fun setListeners() = with(binding) {
-        textView6.setOnClickListener {
-            ClipboardUtil.copyToClipboard(context, "ip", textView6.text.toString())
-            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-        }
-        buttonKill.setOnClickListener {
-            val intent = Intent(KILL_THE_APP)
-            requireContext().sendBroadcast(intent)
-        }
-    }
-
     private fun setObservers() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -310,12 +258,21 @@ class CameraFragment : Fragment() {
     override fun onDestroyView() {
         _binding = null
         super.onDestroyView()
+
+
     }
 
     companion object {
 
         private val TAG = CameraFragment::class.java.simpleName
-        private val REQUIRED_PERMISSIONS = arrayOf(CAMERA, INTERNET, FOREGROUND_SERVICE, POST_NOTIFICATIONS)
+        private val REQUIRED_PERMISSIONS = arrayOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.CAMERA,
+            Manifest.permission.FOREGROUND_SERVICE,
+
+            )
         private const val DEFAULT_WIDTH = 1280
         private const val DEFAULT_HEIGHT = 720
     }
