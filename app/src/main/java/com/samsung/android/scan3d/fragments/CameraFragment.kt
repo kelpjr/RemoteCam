@@ -48,6 +48,7 @@ import com.samsung.android.scan3d.CameraActivity
 import com.samsung.android.scan3d.KILL_THE_APP
 import com.samsung.android.scan3d.R
 import com.samsung.android.scan3d.databinding.FragmentCameraBinding
+import com.samsung.android.scan3d.hotspotServices.createHotspotEnabler
 import com.samsung.android.scan3d.locationServices.LocationService
 import com.samsung.android.scan3d.serv.CamEngine
 import com.samsung.android.scan3d.serv.CameraActionState
@@ -81,6 +82,9 @@ class CameraFragment : Fragment() {
     private var isServiceRunning: Boolean = false
     private var isUpdatingSwitch: Boolean = false
     private lateinit var serviceIntent: Intent
+
+    private var hotspotEnabled = false
+
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -116,10 +120,32 @@ class CameraFragment : Fragment() {
         }
 
         private fun setSwitchListeners() {
-//            binding.switch1.setOnCheckedChangeListener { _, prev ->
-//                viewModel.uiState.value.preview = prev
-//                sendViewState()
-//            }
+            hotspotEnabled = !hotspotEnabled
+
+            binding.switch1.setOnCheckedChangeListener { _, prev ->
+                binding.switch1.isEnabled = false
+                isUpdatingSwitch = true
+                //todo convert all this into a proper service
+                isServiceRunning = if (prev) {
+                    createHotspotEnabler(requireContext()).let {
+                        it.enableTethering()
+                    }
+                    true
+                } else {
+                    createHotspotEnabler(requireContext()).let {
+                        it.disableTethering()
+                    }
+                    false
+                }
+
+                val handler = Handler(Looper.getMainLooper())
+                handler.post(Runnable {
+                    binding.switch1.isChecked = isServiceRunning
+                    binding.switch1.isEnabled = true
+                    isUpdatingSwitch = false
+                })
+            }
+
             serviceIntent = Intent(requireContext(), LocationService::class.java)
             binding.switch2.setOnCheckedChangeListener { _, prev ->
                 binding.switch2.isEnabled = false

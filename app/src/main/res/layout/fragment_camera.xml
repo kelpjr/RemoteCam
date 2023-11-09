@@ -116,9 +116,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
                         android:layout_gravity="left"
-                        android:checked="true"
+                        android:checked="false"
                         android:splitTrack="false"
-                        android:text="Preview"
+                        android:text="Hotspot"
                         android:textAppearance="@style/TextAppearance.AppCompat.Medium"
                         android:textColor="#C1C1C1" />
 

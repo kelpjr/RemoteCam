@@ -20,7 +20,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.samsung.android.scan3d.databinding.ActivityCameraBinding
@@ -33,11 +36,16 @@ import com.samsung.android.scan3d.serv.CameraActionState.START
 import com.samsung.android.scan3d.serv.CameraActionState.STOP
 
 const val KILL_THE_APP = "KILL"
+const val MY_PERMISSIONS_MANAGE_WRITE_SETTINGS = 100
+
 
 class CameraActivity : AppCompatActivity() {
 
     private var _binding: ActivityCameraBinding? = null
     private val binding get() = _binding!!
+
+    private var mSettingPermission = true
+
 
     private val receiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -53,6 +61,21 @@ class CameraActivity : AppCompatActivity() {
 
         setCameraForegroundServiceState(START)
         registerReceiver(receiver, IntentFilter(KILL_THE_APP))
+        settingPermission()
+
+    }
+
+    private fun settingPermission() {
+        mSettingPermission = true
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.System.canWrite(applicationContext)) {
+                mSettingPermission = false
+                val intent =
+                    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName"))
+                startActivityForResult(intent, MY_PERMISSIONS_MANAGE_WRITE_SETTINGS)
+            }
+        }
     }
 
     override fun onPause() {
