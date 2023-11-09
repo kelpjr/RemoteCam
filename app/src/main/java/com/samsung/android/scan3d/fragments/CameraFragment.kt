@@ -86,10 +86,10 @@ class CameraFragment : Fragment() {
 
     private val receiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            intent.extras?.getParcelable<CamEngine.Companion.DataQuick>("dataQuick")?.let {
-                binding.qualFeedback.text = " " + it.rateKbs + "kB/sec"
-                binding.ftFeedback.text = " " + it.ms + "ms"
-            }
+//            intent.extras?.getParcelable<CamEngine.Companion.DataQuick>("dataQuick")?.let {
+//                binding.qualFeedback.text = " " + it.rateKbs + "kB/sec"
+//                binding.ftFeedback.text = " " + it.ms + "ms"
+//            }
 
             intent.extras?.getParcelable<CamEngine.Companion.Data>("data")?.let {
                 setViews(it)
@@ -102,9 +102,12 @@ class CameraFragment : Fragment() {
             resolutionHeight = resolution.height
             binding.viewFinder.setAspectRatio(resolutionWidth, resolutionHeight)
             setSwitchListeners()
-            setSpinnerCam(data)
-            setSpinnerQua()
-            setSpinnerRes(data)
+//            setSpinnerCam(data)
+//            setSpinnerQua()
+//            setSpinnerRes(data)
+            viewModel.uiState.value.cameraId = data.sensors[0].cameraId
+            viewModel.uiState.value.resolutionIndex = data.resolutionSelected
+
         }
 
         private fun setSwitchListeners() {
@@ -220,30 +223,32 @@ class CameraFragment : Fragment() {
         requestPermissionList(getPermissionsRequest(), REQUIRED_PERMISSIONS)
         cameraActivity = requireActivity() as CameraActivity
 
-        initViews()
+//        initViews()
+        setObservers()
+
     }
 
     private fun initViews() {
-        setViews()
-        setListeners()
+//        setViews()
+//        setListeners()
         setObservers()
     }
 
-    private fun setViews() = with(binding) {
-        textView6.text = "${IpUtil.getLocalIpAddress()}:8080/cam.mjpeg"
-        viewFinder.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                viewFinder.setAspectRatio(resolutionWidth, resolutionHeight)
-                if (viewModel.isPermissionsGranted.value == true) {
-                    cameraActivity.setCameraForegroundServiceState(CameraActionState.NEW_PREVIEW_SURFACE) {
-                        it.putExtra("surface", viewFinder.holder.surface)
-                    }
-                }
-            }
-        })
-    }
+//    private fun setViews() = with(binding) {
+//        textView6.text = "${IpUtil.getLocalIpAddress()}:8080/cam.mjpeg"
+//        viewFinder.holder.addCallback(object : SurfaceHolder.Callback {
+//            override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
+//            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+//            override fun surfaceCreated(holder: SurfaceHolder) {
+//                viewFinder.setAspectRatio(resolutionWidth, resolutionHeight)
+//                if (viewModel.isPermissionsGranted.value == true) {
+//                    cameraActivity.setCameraForegroundServiceState(CameraActionState.NEW_PREVIEW_SURFACE) {
+//                        it.putExtra("surface", viewFinder.holder.surface)
+//                    }
+//                }
+//            }
+//        })
+//    }
 
     private fun setListeners() = with(binding) {
         textView6.setOnClickListener {
@@ -263,9 +268,9 @@ class CameraFragment : Fragment() {
                     it?.let { isGranted ->
                         if (isGranted) {
                             cameraActivity.setCameraForegroundServiceState(CameraActionState.START_ENGINE)
-                            cameraActivity.setCameraForegroundServiceState(CameraActionState.NEW_PREVIEW_SURFACE) { ca ->
-                                ca.putExtra("surface", binding.viewFinder.holder.surface)
-                            }
+//                            cameraActivity.setCameraForegroundServiceState(CameraActionState.NEW_PREVIEW_SURFACE) { ca ->
+////                                ca.putExtra("surface", binding.viewFinder.holder.surface)
+//                            }
                             // engine.start(requireContext())
                         } else {
                             Toast.makeText(
